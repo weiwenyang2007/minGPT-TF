@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class GPTConfig:
     """ base GPT config, params common to all GPT versions """
+    #droupOut rate:
     embd_pdrop = 0.1
     resid_pdrop = 0.1
     attn_pdrop = 0.1
@@ -156,6 +157,8 @@ class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, attn_pdrop, resid_pdrop):
         super(EncoderLayer, self).__init__()
 
+        print('EncoderLayer d_model=' + str(d_model) + ',num_heads=' + str(num_heads))
+        #d_model=128,num_heads=4
         self.mha = MultiHeadAttention(d_model, num_heads,
                                       attn_pdrop, resid_pdrop)
         self.ffn = point_wise_feed_forward_network(
@@ -177,20 +180,37 @@ class GPT(tf.keras.Model):
         super().__init__()
 
         # input embedding stem
+        print('config.vocab_size=' + str(config.vocab_size) + ',config.n_embd=' + str(config.n_embd))
+        #config.vocab_size=10,config.n_embd=128, so token Param=1280
         self.tok_emb = tf.keras.layers.Embedding(config.vocab_size,
                                                  config.n_embd,
                                                  embeddings_initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02))
+        
+        print('config.block_size=' + str(config.block_size) + ',config.n_embd=' + str(config.n_embd))
+        #config.block_size=6,config.n_embd=128, so position Param=1280, should be same as token Param size.
         self.pos_emb = self.add_weight("position_embeddings",
                                        shape=[config.block_size,
                                               config.n_embd],
                                        initializer=tf.keras.initializers.Zeros(),
                                        dtype=tf.float32)
+        
+        print('config.embd_pdrop=' + str(config.embd_pdrop))
+        #config.embd_pdrop=0.1, Param=0
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
+        
         # transformer
+        print('config.n_embd=' + str(config.n_embd) + ',config.n_head=' + str(config.n_head) + ',config.attn_pdrop=' + str(config.attn_pdrop) + ',config.resid_pdrop=' + str(config.resid_pdrop) + ',config.n_layer=' + str(config.n_layer))
+        #config.n_embd=128,config.n_head=4,config.attn_pdrop=0.1,config.resid_pdrop=0.1,config.n_layer=2
+        
+        #There are n_layer=2 of EncoderLayer, each EncoderLayer Param size is 198272 (How to calculate it???)
         self.blocks = [EncoderLayer(config.n_embd, config.n_head, config.attn_pdrop, config.resid_pdrop)
                        for _ in range(config.n_layer)]
+        
         # decoder head
+        # This layer Param is 256, how to calculate it???
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=1e-5)
+        
+        #config.vocab_size=10, so Dense layer Param is n_embd X vocab_size = 128X10 = 1280
         self.head = tf.keras.layers.Dense(config.vocab_size, use_bias=False,
                                           kernel_initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02))
 

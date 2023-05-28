@@ -30,7 +30,7 @@ class TrainerConfig:
     warmup_tokens = 375e6
     final_tokens = 260e9  # (at what point we reach 10% of original LR)
     # checkpoint settings
-    ckpt_path = None
+    ckpt_path = None #'./checkpoings/ckpt_math_2dig_debug/minigpt.ckpt'
     num_workers = 0  # for DataLoader
 
     def __init__(self, **kwargs):
@@ -40,7 +40,7 @@ class TrainerConfig:
 
 class Trainer:
 
-    def __init__(self, model, model_config, train_dataset, train_dataset_len, test_dataset, test_dataset_len, config):
+    def __init__(self, model, model_config, train_dataset, train_dataset_len, test_dataset, test_dataset_len, config, device='GPU:0'):
         self.train_dataset = train_dataset.batch(config.batch_size)
         self.train_dataset_len = train_dataset_len
         self.test_dataset = test_dataset
@@ -51,9 +51,10 @@ class Trainer:
             self.test_dataset_len = test_dataset_len
         self.config = config
         self.tokens = 0
-        self.strategy = tf.distribute.OneDeviceStrategy("GPU:0")
-        if len(tf.config.list_physical_devices('GPU')) > 1:
-            self.strategy = tf.distribute.MirroredStrategy()
+        if device == 'GPU:All' and len(tf.config.list_physical_devices('GPU')) > 1 :
+            self.strategy = tf.distribute.MirroredStrategy()            
+        else :
+            self.strategy = tf.distribute.OneDeviceStrategy(device)
 
         with self.strategy.scope():
             self.model = model(model_config)
@@ -69,7 +70,15 @@ class Trainer:
 
     def save_checkpoints(self):
         if self.config.ckpt_path is not None:
+            print('The gpt train model weight is saved to checkpoints:'+self.config.ckpt_path)
             self.model.save_weights(self.config.ckpt_path)
+        else:
+            print('config.ckpt_path is not set, the gpt train model weight will not be saved')
+
+    def load_checkpoints(self):
+        if self.config.ckpt_path is not None:
+            print('The gpt train model weight is load from checkpoints:'+self.config.ckpt_path)
+            self.model.load_weights(self.config.ckpt_path)
 
     def lr_cosine_decay(self):
         if self.tokens == 0:
@@ -82,6 +91,11 @@ class Trainer:
         lr = self.config.learning_rate * lr_mult
         return lr
 
+    
+    #must call after the model.build, so call it after train()
+    def display_model(self):        
+        self.model.summary()
+        
     def train(self):
 
         train_loss_metric = tf.keras.metrics.Mean('training_loss', dtype=tf.float32)
